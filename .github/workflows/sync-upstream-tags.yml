@@ -1,0 +1,60 @@
+name: Sync Tags and Create Releases
+
+on:
+  schedule:
+    - cron: '0 * * * *' # every hour
+  workflow_dispatch:
+
+jobs:
+  sync-tags:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/jito-foundation/jito-solana.git
+          git fetch upstream --tags
+
+      - name: Sync new tags
+        run: |
+          # Get all tags from upstream
+          git fetch upstream --tags
+          # Get list of tags that exist upstream but not in our fork
+          # Filter out peeled tags (^{} suffix), get unique tag names, and only v20.2tags
+          for tag in $(git ls-remote --tags upstream | sed s|.*refs/tags/|| | grep -v\^[object Object]}$' | grep -E ^v2\.[2-9|^v[3-9]' | sort -u); do
+            if ! git tag -l | grep -q "^$tag$"; then
+              echo Syncing tag: $tag"
+              git fetch upstream tag $tag
+              git tag $tag upstream/$tag
+              git push origin $tag
+            fi
+          done
+
+  create-releases:
+    runs-on: ubuntu-latest
+    needs: sync-tags
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create missing releases
+        run: |
+          # Get all v2.2+ tags from upstream
+          for tag in $(git ls-remote --tags https://github.com/jito-foundation/jito-solana.git | sed s|.*refs/tags/|| | grep -v\^[object Object]}$' | grep -E ^v2\.[2-9|^v[3-9]' | sort -u); do
+            if ! gh release view $tag" --repo team-supersafe/forked-jito-solana >/dev/null 2>&1; then
+              echoCreating release for tag: $tag        gh release create "$tag--titleRelease $tag" --notes "Mirrored from upstream jito-foundation/jito-solana" --repo team-supersafe/forked-jito-solana
+            fi
+          done
