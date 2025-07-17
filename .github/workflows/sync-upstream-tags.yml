@@ -53,8 +53,9 @@ jobs:
       - name: Create missing releases
         run: |
           # Get all v2.2+ tags from upstream
-          for tag in $(git ls-remote --tags https://github.com/jito-foundation/jito-solana.git | sed s|.*refs/tags/|| | grep -v\^[object Object]}$' | grep -E ^v2\.[2-9|^v[3-9]' | sort -u); do
-            if ! gh release view $tag" --repo team-supersafe/forked-jito-solana >/dev/null 2>&1; then
-              echoCreating release for tag: $tag        gh release create "$tag--titleRelease $tag" --notes "Mirrored from upstream jito-foundation/jito-solana" --repo team-supersafe/forked-jito-solana
+          for tag in $(git ls-remote --tags https://github.com/jito-foundation/jito-solana.git | sed 's|.*refs/tags/||' | grep -v '\^{}$' | grep -E '^v2\.[2-9]|^v[3-9]' | sort -u); do
+            if ! gh release view "$tag" --repo team-supersafe/forked-jito-solana >/dev/null 2>&1; then
+              echo "Creating release for tag: $tag"
+              gh release create "$tag" --title "Release $tag" --notes "Mirrored from upstream jito-foundation/jito-solana" --repo team-supersafe/forked-jito-solana
             fi
           done
