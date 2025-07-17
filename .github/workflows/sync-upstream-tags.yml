@@ -29,10 +29,10 @@ jobs:
           # Get all tags from upstream
           git fetch upstream --tags
           # Get list of tags that exist upstream but not in our fork
-          # Filter out peeled tags (^{} suffix), get unique tag names, and only v20.2tags
-          for tag in $(git ls-remote --tags upstream | sed s|.*refs/tags/|| | grep -v\^[object Object]}$' | grep -E ^v2\.[2-9|^v[3-9]' | sort -u); do
+          # Filter out peeled tags (^{} suffix), get unique tag names, and only v2.2+ tags
+          for tag in $(git ls-remote --tags upstream | sed 's|.*refs/tags/||' | grep -v '\^{}$' | grep -E '^v2\.[2-9]|^v[3-9]' | sort -u); do
             if ! git tag -l | grep -q "^$tag$"; then
-              echo Syncing tag: $tag"
+              echo "Syncing tag: $tag"
               git fetch upstream tag $tag
               git tag $tag upstream/$tag
               git push origin $tag
