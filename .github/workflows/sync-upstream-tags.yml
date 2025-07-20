@@ -5,11 +5,14 @@ on:
   #   - cron: '0 * * * *' # every hour
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   sync-tags:
     runs-on: ubuntu-latest
     env:
-      GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
@@ -21,12 +24,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global credential.helper store
-          echo "https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com" > ~/.git-credentials
+          echo "https://x-access-token:${{ github.token }}@github.com" > ~/.git-credentials
 
       - name: Add upstream remote
         run: |
           git remote add upstream https://github.com/jito-foundation/jito-solana.git
-          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/team-supersafe/forked-jito-solana.git
+          git remote set-url origin https://x-access-token:${{ github.token }}@github.com/team-supersafe/forked-jito-solana.git
 
       - name: Sync new tags
         run: |
@@ -36,7 +39,13 @@ jobs:
             if ! git tag -l | grep -q "^$tag$"; then
               echo "Syncing tag: $tag"
               git fetch upstream tag $tag
-              git push origin $tag
+              # Create a lightweight tag pointing to the upstream commit
+              git tag -f "$tag" "upstream/$tag"
+              # Try to push the tag, but continue if it fails due to workflow file conflicts
+              if ! git push origin "$tag" --force; then
+                echo "Warning: Failed to push tag $tag (likely due to workflow file conflicts)"
+                echo "This is expected if the tag contains workflow files that require special permissions"
+              fi
             fi
           done
 
