@@ -38,9 +38,12 @@ jobs:
           for tag in $(git ls-remote --tags upstream | sed 's|.*refs/tags/||' | grep -v '\^{}$' | grep -E '^v2\.[2-9]|^v[3-9]' | sort -u); do
             if ! git tag -l | grep -q "^$tag$"; then
               echo "Syncing tag: $tag"
+              # Fetch the specific tag from upstream
               git fetch upstream tag $tag
-              # Create a lightweight tag pointing to the upstream commit
-              git tag -f "$tag" "upstream/$tag"
+              # Get the commit hash for this tag
+              commit_hash=$(git rev-parse FETCH_HEAD)
+              # Create a lightweight tag pointing to the fetched commit
+              git tag -f "$tag" "$commit_hash"
               # Try to push the tag, but continue if it fails due to workflow file conflicts
               if ! git push origin "$tag" --force; then
                 echo "Warning: Failed to push tag $tag (likely due to workflow file conflicts)"
