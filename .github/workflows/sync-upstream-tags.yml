@@ -12,7 +12,7 @@ jobs:
   sync-tags:
     runs-on: ubuntu-latest
     env:
-      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
@@ -24,12 +24,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global credential.helper store
-          echo "https://x-access-token:${{ github.token }}@github.com" > ~/.git-credentials
+          echo "https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com" > ~/.git-credentials
 
       - name: Add upstream remote
         run: |
           git remote add upstream https://github.com/jito-foundation/jito-solana.git
-          git remote set-url origin https://x-access-token:${{ github.token }}@github.com/team-supersafe/forked-jito-solana.git
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/team-supersafe/forked-jito-solana.git
 
       - name: Sync new tags
         run: |
@@ -42,12 +42,20 @@ jobs:
               git fetch upstream tag $tag
               # Get the commit hash for this tag
               commit_hash=$(git rev-parse FETCH_HEAD)
+              
+              # Check if this commit contains workflow files that might cause permission issues
+              if git show --name-only "$commit_hash" | grep -q "^\.github/workflows/"; then
+                echo "Warning: Skipping tag $tag as it contains workflow files that require special permissions"
+                continue
+              fi
+              
               # Create a lightweight tag pointing to the fetched commit
               git tag -f "$tag" "$commit_hash"
-              # Try to push the tag, but continue if it fails due to workflow file conflicts
+              # Try to push the tag
               if ! git push origin "$tag" --force; then
-                echo "Warning: Failed to push tag $tag (likely due to workflow file conflicts)"
-                echo "This is expected if the tag contains workflow files that require special permissions"
+                echo "Warning: Failed to push tag $tag"
+              else
+                echo "Successfully synced tag: $tag"
               fi
             fi
           done
