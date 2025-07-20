@@ -1,13 +1,15 @@
 name: Sync Tags and Create Releases
 
 on:
-  schedule:
-    - cron: '0 * * * *' # every hour
+  # schedule:
+  #   - cron: '0 * * * *' # every hour
   workflow_dispatch:
 
 jobs:
   sync-tags:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
@@ -18,29 +20,22 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global credential.helper store
+          echo "https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com" > ~/.git-credentials
 
       - name: Add upstream remote
         run: |
           git remote add upstream https://github.com/jito-foundation/jito-solana.git
-
-      - name: Sync upstream main branch
-        run: |
-          git fetch upstream
-          git checkout main
-          git merge upstream/main
-          git push origin main
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/team-supersafe/forked-jito-solana.git
 
       - name: Sync new tags
         run: |
-          # Get all tags from upstream
-          git fetch upstream --tags
           # Get list of tags that exist upstream but not in our fork
           # Filter out peeled tags (^{} suffix), get unique tag names, and only v2.2+ tags
           for tag in $(git ls-remote --tags upstream | sed 's|.*refs/tags/||' | grep -v '\^{}$' | grep -E '^v2\.[2-9]|^v[3-9]' | sort -u); do
             if ! git tag -l | grep -q "^$tag$"; then
               echo "Syncing tag: $tag"
               git fetch upstream tag $tag
-              git tag $tag upstream/$tag
               git push origin $tag
             fi
           done
