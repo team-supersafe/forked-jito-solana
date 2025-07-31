@@ -55,9 +55,13 @@ jobs:
             # Extract version from tag
             version=$(echo "$tag" | sed 's/^v\([0-9]\+\.[0-9]\+\.[0-9]\+\)-jito/\1/')
             
-            # Fetch the specific tag from upstream
-            git fetch upstream tag $tag
-            commit_hash=$(git rev-parse FETCH_HEAD)
+            # Get the commit hash for this tag from upstream without creating a local tag
+            commit_hash=$(git ls-remote upstream "refs/tags/$tag" | cut -f1)
+            
+            if [ -z "$commit_hash" ]; then
+              echo "Could not find commit hash for tag $tag, skipping"
+              continue
+            fi
             
             # Check what version is actually in the upstream commit
             upstream_version=$(git show "$commit_hash:Cargo.toml" | grep '^version =' | sed 's/version = "\([^"]*\)"/\1/')
@@ -81,15 +85,9 @@ jobs:
             else
               # Upstream version looks correct, sync the tag
               echo "Creating tag: $tag"
-              if git tag -a "$tag" -m "Release $tag" "$commit_hash" 2>/dev/null; then
-                echo "Pushing tag: $tag"
-                if git push origin "$tag"; then
-                  echo "Successfully synced tag: $tag"
-                else
-                  echo "Failed to push tag: $tag"
-                fi
-              else
-                echo "Failed to create tag: $tag (may already exist)"
-              fi
+              git tag -a "$tag" -m "Release $tag" "$commit_hash"
+              echo "Pushing tag: $tag"
+              git push origin "$tag"
+              echo "Successfully synced tag: $tag"
             fi
           done
