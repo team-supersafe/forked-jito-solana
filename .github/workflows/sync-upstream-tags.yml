@@ -63,9 +63,12 @@ jobs:
             # Fetch the specific commit from upstream
             git fetch upstream "$commit_hash"
             
+            # Get the actual commit that the tag points to (not the tag itself)
+            actual_commit=$(git rev-parse "$commit_hash^{commit}" 2>/dev/null || echo "$commit_hash")
+            
             # Create the annotated tag
             echo "Creating tag: $tag"
-            git tag -a "$tag" -m "Release $tag" "$commit_hash"
+            git tag -a "$tag" -m "Release $tag" "$actual_commit"
             echo "Pushing tag: $tag"
             git push origin "$tag"
             echo "Successfully synced tag: $tag"
