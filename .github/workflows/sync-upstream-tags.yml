@@ -52,9 +52,6 @@ jobs:
             
             echo "Processing tag: $tag"
             
-            # Extract version from tag
-            version=$(echo "$tag" | sed 's/^v\([0-9]\+\.[0-9]\+\.[0-9]\+\)-jito/\1/')
-            
             # Get the commit hash for this tag from upstream
             commit_hash=$(git ls-remote upstream "refs/tags/$tag" | cut -f1)
             
@@ -66,31 +63,10 @@ jobs:
             # Fetch the specific commit from upstream
             git fetch upstream "$commit_hash"
             
-            # Check what version is actually in the upstream commit
-            upstream_version=$(git show "$commit_hash:Cargo.toml" | grep '^version =' | sed 's/version = "\([^"]*\)"/\1/')
-            
-            echo "Tag: $tag, Expected version: $version, Upstream version: $upstream_version"
-            
-            # Check if this commit is from master branch
-            is_master_commit=$(git show --format="%B" "$commit_hash" | head -1 | grep -c "master\|main" || echo "0")
-            
-            # Ensure is_master_commit is a valid integer
-            if [ -z "$is_master_commit" ] || ! [[ "$is_master_commit" =~ ^[0-9]+$ ]]; then
-              is_master_commit=0
-            fi
-            
-            echo "Debug: is_master_commit = '$is_master_commit'"
-            
-            if [ "$upstream_version" != "$version" ] || [ "$is_master_commit" -gt 0 ]; then
-              echo "Warning: Upstream tag $tag appears to be from master branch or has wrong version"
-              echo "Skipping this tag as it may not be a proper release"
-              continue
-            else
-              # Upstream version looks correct, sync the tag
-              echo "Creating tag: $tag"
-              git tag -a "$tag" -m "Release $tag" "$commit_hash"
-              echo "Pushing tag: $tag"
-              git push origin "$tag"
-              echo "Successfully synced tag: $tag"
-            fi
+            # Create the annotated tag
+            echo "Creating tag: $tag"
+            git tag -a "$tag" -m "Release $tag" "$commit_hash"
+            echo "Pushing tag: $tag"
+            git push origin "$tag"
+            echo "Successfully synced tag: $tag"
           done
