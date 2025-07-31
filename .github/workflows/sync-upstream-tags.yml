@@ -36,44 +36,60 @@ jobs:
           set -e  # Exit on any error
           
           for tag in $(git ls-remote --tags upstream | sed 's|.*refs/tags/||' | grep -v '\^{}$' | grep -E '^v2\.[2-9]|^v[3-9]' | sort -u); do
-            if ! git tag -l | grep -q "^$tag$"; then
-              echo "Processing tag: $tag"
-              
-              # Extract version from tag
-              version=$(echo "$tag" | sed 's/^v\([0-9]\+\.[0-9]\+\.[0-9]\+\)-jito/\1/')
-              
-              # Fetch the specific tag from upstream
-              git fetch upstream tag $tag
-              commit_hash=$(git rev-parse FETCH_HEAD)
-              
-              # Check what version is actually in the upstream commit
-              upstream_version=$(git show "$commit_hash:Cargo.toml" | grep '^version =' | sed 's/version = "\([^"]*\)"/\1/')
-              
-              echo "Tag: $tag, Expected version: $version, Upstream version: $upstream_version"
-              
-              # Check if this commit is from master branch
-              is_master_commit=$(git show --format="%B" "$commit_hash" | head -1 | grep -c "master\|main" || echo "0")
-              
-              # Ensure is_master_commit is a valid integer
-              if [ -z "$is_master_commit" ] || ! [[ "$is_master_commit" =~ ^[0-9]+$ ]]; then
-                is_master_commit=0
-              fi
-              
-              echo "Debug: is_master_commit = '$is_master_commit'"
-              
-              if [ "$upstream_version" != "$version" ] || [ "$is_master_commit" -gt 0 ]; then
-                echo "Warning: Upstream tag $tag appears to be from master branch or has wrong version"
-                echo "Skipping this tag as it may not be a proper release"
-                continue
-              else
-                # Upstream version looks correct, sync the tag
-                echo "Creating tag: $tag"
-                git tag -a "$tag" -m "Release $tag" "$commit_hash"
-                echo "Pushing tag: $tag"
-                git push origin "$tag"
-                echo "Successfully synced tag: $tag"
-              fi
+            echo "Checking tag: $tag"
+            
+            # Check if tag exists locally
+            if git tag -l | grep -q "^$tag$"; then
+              echo "Tag $tag already exists locally, skipping"
+              continue
+            fi
+            
+            # Check if tag exists remotely
+            if git ls-remote --tags origin | grep -q "refs/tags/$tag$"; then
+              echo "Tag $tag already exists remotely, skipping"
+              continue
+            fi
+            
+            echo "Processing tag: $tag"
+            
+            # Extract version from tag
+            version=$(echo "$tag" | sed 's/^v\([0-9]\+\.[0-9]\+\.[0-9]\+\)-jito/\1/')
+            
+            # Fetch the specific tag from upstream
+            git fetch upstream tag $tag
+            commit_hash=$(git rev-parse FETCH_HEAD)
+            
+            # Check what version is actually in the upstream commit
+            upstream_version=$(git show "$commit_hash:Cargo.toml" | grep '^version =' | sed 's/version = "\([^"]*\)"/\1/')
+            
+            echo "Tag: $tag, Expected version: $version, Upstream version: $upstream_version"
+            
+            # Check if this commit is from master branch
+            is_master_commit=$(git show --format="%B" "$commit_hash" | head -1 | grep -c "master\|main" || echo "0")
+            
+            # Ensure is_master_commit is a valid integer
+            if [ -z "$is_master_commit" ] || ! [[ "$is_master_commit" =~ ^[0-9]+$ ]]; then
+              is_master_commit=0
+            fi
+            
+            echo "Debug: is_master_commit = '$is_master_commit'"
+            
+            if [ "$upstream_version" != "$version" ] || [ "$is_master_commit" -gt 0 ]; then
+              echo "Warning: Upstream tag $tag appears to be from master branch or has wrong version"
+              echo "Skipping this tag as it may not be a proper release"
+              continue
             else
-              echo "Tag $tag already exists, skipping"
+              # Upstream version looks correct, sync the tag
+              echo "Creating tag: $tag"
+              if git tag -a "$tag" -m "Release $tag" "$commit_hash" 2>/dev/null; then
+                echo "Pushing tag: $tag"
+                if git push origin "$tag"; then
+                  echo "Successfully synced tag: $tag"
+                else
+                  echo "Failed to push tag: $tag"
+                fi
+              else
+                echo "Failed to create tag: $tag (may already exist)"
+              fi
             fi
           done
