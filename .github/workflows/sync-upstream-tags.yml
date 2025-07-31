@@ -55,13 +55,16 @@ jobs:
             # Extract version from tag
             version=$(echo "$tag" | sed 's/^v\([0-9]\+\.[0-9]\+\.[0-9]\+\)-jito/\1/')
             
-            # Get the commit hash for this tag from upstream without creating a local tag
+            # Get the commit hash for this tag from upstream
             commit_hash=$(git ls-remote upstream "refs/tags/$tag" | cut -f1)
             
             if [ -z "$commit_hash" ]; then
               echo "Could not find commit hash for tag $tag, skipping"
               continue
             fi
+            
+            # Fetch the specific commit from upstream
+            git fetch upstream "$commit_hash"
             
             # Check what version is actually in the upstream commit
             upstream_version=$(git show "$commit_hash:Cargo.toml" | grep '^version =' | sed 's/version = "\([^"]*\)"/\1/')
