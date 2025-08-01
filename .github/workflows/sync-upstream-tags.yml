@@ -1,6 +1,8 @@
 name: Sync Tags Only
 
 on:
+  schedule:
+    - cron: '0 * * * *' # every hour
   workflow_dispatch:
 
 permissions:
@@ -20,19 +22,6 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Test permissions
-        run: |
-          echo "Testing GitHub API permissions..."
-          curl -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
-               -H "Accept: application/vnd.github.v3+json" \
-               https://api.github.com/user
-          echo ""
-          echo "Testing repository access..."
-          curl -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
-               -H "Accept: application/vnd.github.v3+json" \
-               https://api.github.com/repos/team-supersafe/forked-jito-solana
-          echo ""
 
       - name: Add upstream remote
         run: |
@@ -56,12 +45,8 @@ jobs:
             # Get the actual commit that the tag points to (not the tag itself)
             commit_hash=$(git rev-parse "$tag^{commit}")
 
-            # Create annotated tag locally
-            echo "Creating tag: $tag"
+            # Create annotated tag locally and push
             git tag -a "$tag" -m "Release $tag" "$commit_hash" -f
-            
-            # Push the tag
-            echo "Pushing tag: $tag"
             git push origin "$tag"
             echo "Successfully synced tag: $tag"
           done
