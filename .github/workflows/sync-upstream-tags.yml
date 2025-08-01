@@ -1,8 +1,6 @@
 name: Sync Tags Only
 
 on:
-  # schedule:
-  #   - cron: '0 * * * *' # every hour
   workflow_dispatch:
 
 permissions:
@@ -11,75 +9,41 @@ permissions:
 jobs:
   sync-tags:
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up git
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global credential.helper store
-          echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Add upstream remote
         run: |
           git remote add upstream https://github.com/jito-foundation/jito-solana.git
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/team-supersafe/forked-jito-solana.git
 
-      - name: Sync new tags with proper verification
+      - name: Sync tags from upstream
         run: |
-          set -e  # Exit on any error
+          # Fetch all tags from upstream
+          git fetch upstream --tags
           
-          for tag in $(git ls-remote --tags upstream | sed 's|.*refs/tags/||' | grep -v '\^{}$' | grep -E '^v2\.[2-9]|^v[3-9]' | sort -u); do
-            echo "Checking tag: $tag"
-            
-            # Check if tag exists locally
-            if git tag -l | grep -q "^$tag$"; then
-              echo "Tag $tag already exists locally, skipping"
-              continue
-            fi
-            
-            # Check if tag exists remotely
-            if git ls-remote --tags origin | grep -q "refs/tags/$tag$"; then
-              echo "Tag $tag already exists remotely, skipping"
-              continue
-            fi
-            
+          # Get list of tags that match our pattern
+          for tag in $(git tag -l | grep -E '^v2\.[2-9]|^v[3-9]' | sort -u); do
             echo "Processing tag: $tag"
             
-            # Get the commit hash for this tag from upstream
-            commit_hash=$(git ls-remote upstream "refs/tags/$tag" | cut -f1)
-            
-            if [ -z "$commit_hash" ]; then
-              echo "Could not find commit hash for tag $tag, skipping"
+            # Check if tag already exists in origin
+            if git ls-remote --tags origin | grep -q "refs/tags/$tag$"; then
+              echo "Tag $tag already exists in origin, skipping"
               continue
             fi
             
-            # Fetch the specific commit from upstream
-            git fetch upstream "$commit_hash"
+            # Get the commit hash for this tag
+            commit_hash=$(git rev-parse "$tag")
             
-            # Get the actual commit that the tag points to (not the tag itself)
-            actual_commit=$(git rev-parse "$commit_hash^{commit}" 2>/dev/null || echo "$commit_hash")
-            
-            # Check if this commit contains workflow files
-            if git show --name-only "$actual_commit" | grep -q "\.github/workflows/"; then
-              echo "Warning: Tag $tag contains workflow files, skipping to avoid permission issues"
-              continue
-            fi
-            
-            # Create the annotated tag
+            # Create annotated tag locally
             echo "Creating tag: $tag"
-            git tag -a "$tag" -m "Release $tag" "$actual_commit"
+            git tag -a "$tag" -m "Release $tag" "$commit_hash" -f
+            
+            # Push the tag
             echo "Pushing tag: $tag"
-            if git push origin "$tag"; then
-              echo "Successfully synced tag: $tag"
-            else
-              echo "Failed to push tag: $tag"
-              git tag -d "$tag"
-            fi
+            git push origin "$tag"
+            echo "Successfully synced tag: $tag"
           done
