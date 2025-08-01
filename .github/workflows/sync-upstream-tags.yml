@@ -66,6 +66,12 @@ jobs:
             # Get the actual commit that the tag points to (not the tag itself)
             actual_commit=$(git rev-parse "$commit_hash^{commit}" 2>/dev/null || echo "$commit_hash")
             
+            # Check if this commit contains workflow files
+            if git show --name-only "$actual_commit" | grep -q "\.github/workflows/"; then
+              echo "Warning: Tag $tag contains workflow files, skipping to avoid permission issues"
+              continue
+            fi
+            
             # Create the annotated tag
             echo "Creating tag: $tag"
             git tag -a "$tag" -m "Release $tag" "$actual_commit"
