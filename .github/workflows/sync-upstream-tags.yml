@@ -5,15 +5,14 @@ on:
   #   - cron: '0 * * * *' # every hour
   workflow_dispatch:
 
+# Grant the necessary permissions to the GITHUB_TOKEN
 permissions:
-  contents: write
-  actions: write
+  contents: write # Needed to push commits and tags
+  workflows: write  # Crucial for pushing commits that contain workflow file changes
 
 jobs:
   sync-tags:
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
@@ -24,13 +23,12 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global credential.helper store
-          echo "https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com" > ~/.git-credentials
-
+          
       - name: Add upstream remote
         run: |
+          # Use the GITHUB_TOKEN to authenticate with the origin repository
           git remote add upstream https://github.com/jito-foundation/jito-solana.git
-          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/team-supersafe/forked-jito-solana.git
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
 
       - name: Sync new tags with proper verification
         run: |
@@ -39,13 +37,11 @@ jobs:
           for tag in $(git ls-remote --tags upstream | sed 's|.*refs/tags/||' | grep -v '\^{}$' | grep -E '^v2\.[2-9]|^v[3-9]' | sort -u); do
             echo "Checking tag: $tag"
             
-            # Check if tag exists locally
             if git tag -l | grep -q "^$tag$"; then
               echo "Tag $tag already exists locally, skipping"
               continue
             fi
             
-            # Check if tag exists remotely
             if git ls-remote --tags origin | grep -q "refs/tags/$tag$"; then
               echo "Tag $tag already exists remotely, skipping"
               continue
@@ -53,7 +49,6 @@ jobs:
             
             echo "Processing tag: $tag"
             
-            # Get the commit hash for this tag from upstream
             commit_hash=$(git ls-remote upstream "refs/tags/$tag" | cut -f1)
             
             if [ -z "$commit_hash" ]; then
@@ -61,13 +56,10 @@ jobs:
               continue
             fi
             
-            # Fetch the specific commit from upstream
             git fetch upstream "$commit_hash"
             
-            # Get the actual commit that the tag points to (not the tag itself)
             actual_commit=$(git rev-parse "$commit_hash^{commit}" 2>/dev/null || echo "$commit_hash")
             
-            # Create the annotated tag
             echo "Creating tag: $tag"
             git tag -a "$tag" -m "Release $tag" "$actual_commit"
             echo "Pushing tag: $tag"
