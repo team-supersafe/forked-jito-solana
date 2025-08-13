@@ -31,19 +31,19 @@ jobs:
         run: |
           # Fetch all branches and tags from upstream
           git fetch upstream
-          
-          # Get the default branch name (usually main or master)
-          DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
-          
-          # Switch to the default branch
-          git checkout $DEFAULT_BRANCH
-          
+
+          # Get the default branch of upstream
+          UPSTREAM_DEFAULT_BRANCH=$(git remote show upstream | awk '/HEAD branch/ {print $NF}')
+
+          # Switch to that branch locally (create it if it doesn't exist)
+          git checkout $UPSTREAM_DEFAULT_BRANCH 2>/dev/null || git checkout -b $UPSTREAM_DEFAULT_BRANCH origin/$UPSTREAM_DEFAULT_BRANCH
+
           # Merge upstream changes into the local branch
-          git merge upstream/$DEFAULT_BRANCH --no-edit
-          
+          git merge upstream/$UPSTREAM_DEFAULT_BRANCH --no-edit
+
           # Push the updated branch to origin (your fork)
-          git push origin $DEFAULT_BRANCH
-          
+          git push origin $UPSTREAM_DEFAULT_BRANCH
+
           echo "Successfully synced fork with upstream"
 
       - name: Sync tags from upstream
