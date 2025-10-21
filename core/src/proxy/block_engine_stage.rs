@@ -258,7 +258,10 @@ impl BlockEngineStage {
                 .into_iter()
                 .min_by_key(|(_url, (_socket, latency_us))| *latency_us)
         {
-            shredstream_receiver_address.store(Arc::new(Some(best_socket))); // no else branch needed since we'll still send to shred_receiver_address
+            if best_socket.is_some() {
+                // no else branch needed since we'll still send to shred_receiver_address
+                shredstream_receiver_address.store(Arc::new(best_socket));
+            }
         }
 
         datapoint_info!(
@@ -308,17 +311,19 @@ impl BlockEngineStage {
         let mut attempted = false;
         let mut backend_endpoint = endpoint.clone();
         let endpoint_count = candidates.len();
-        for (block_engine_url, (shredstream_socket, latency_us)) in candidates
+        for (block_engine_url, (maybe_shredstream_socket, latency_us)) in candidates
             .into_iter()
             .sorted_unstable_by_key(|(_endpoint, (_shredstream_socket, latency_us))| *latency_us)
         {
             if block_engine_url != local_block_engine_config.block_engine_url {
-                info!("Selected best Block Engine url: {block_engine_url}, Shredstream socket: {shredstream_socket}, ping: ({:?})",
+                info!("Selected best Block Engine url: {block_engine_url}, Shredstream socket: {maybe_shredstream_socket:?}, ping: ({:?})",
                     Duration::from_micros(latency_us)
                 );
                 backend_endpoint = Self::get_endpoint(block_engine_url.as_str())?;
             }
-            shredstream_receiver_address.store(Arc::new(Some(shredstream_socket)));
+            if let Some(shredstream_socket) = maybe_shredstream_socket {
+                shredstream_receiver_address.store(Arc::new(Some(shredstream_socket)));
+            }
             attempted = true;
             let connect_start = Instant::now();
             match Self::connect_auth_and_stream(
@@ -387,8 +392,8 @@ impl BlockEngineStage {
         ahash::HashMap<
             String, /* block engine url */
             (
-                SocketAddr, /* shredstream receiver */
-                u64,        /* latency us */
+                Option<SocketAddr>, /* shredstream receiver, fallable when DNS can't resolve */
+                u64,                /* latency us */
             ),
         >,
     > {
@@ -413,7 +418,7 @@ impl BlockEngineStage {
                 ));
             };
 
-            let Some(ss) = global
+            let ss_res = global
                 .shredstream_receiver_address
                 .to_socket_addrs()
                 .inspect_err(|e| {
@@ -426,16 +431,11 @@ impl BlockEngineStage {
                     );
                 })
                 .ok()
-                .and_then(|mut shredstream_sockets| shredstream_sockets.next())
-            else {
-                return Err(ProxyError::BlockEngineEndpointError(
-                    "Failed to resolve global shredstream receiver address".to_owned(),
-                ));
-            };
+                .and_then(|mut shredstream_sockets| shredstream_sockets.next());
 
             return Ok(ahash::HashMap::from_iter([(
                 global.block_engine_url,
-                (ss, u64::MAX),
+                (ss_res, u64::MAX),
             )]));
         }
 
@@ -585,8 +585,8 @@ impl BlockEngineStage {
     ) -> ahash::HashMap<
         String, /* block engine url */
         (
-            SocketAddr, /* shredstream receiver */
-            u64,        /* latency us */
+            Option<SocketAddr>, /* shredstream receiver, fallable when DNS can't resolve */
+            u64,                /* latency us */
         ),
     > {
         const PING_COUNT: usize = 3;
@@ -619,8 +619,8 @@ impl BlockEngineStage {
         let mut agg_endpoints: ahash::HashMap<
             String, /* block engine url */
             (
-                SocketAddr, /* shredstream receiver */
-                u64,        /* latency us */
+                Option<SocketAddr>, /* shredstream receiver, fallable when DNS can't resolve */
+                u64,                /* latency us */
             ),
         > = ahash::HashMap::with_capacity(endpoints.len());
         let mut best_endpoint = (None, u64::MAX);
@@ -645,7 +645,7 @@ impl BlockEngineStage {
                         }
                     }
                     Entry::Vacant(entry) => {
-                        let Some(shredstream_socket) = endpoint
+                        let maybe_shredstream_socket = endpoint
                             .shredstream_receiver_address
                             .to_socket_addrs()
                             .inspect_err(|e| {
@@ -655,11 +655,8 @@ impl BlockEngineStage {
                                 )
                             })
                             .ok()
-                            .and_then(|mut shredstream_sockets| shredstream_sockets.next())
-                        else {
-                            return;
-                        };
-                        entry.insert((shredstream_socket, *latency_us));
+                            .and_then(|mut shredstream_sockets| shredstream_sockets.next());
+                        entry.insert((maybe_shredstream_socket, *latency_us));
                     }
                 };
             },
